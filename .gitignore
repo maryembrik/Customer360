@@ -1,0 +1,15 @@
+# Environment
+.venv/
+
+# Data: raw files are large and not ours to redistribute
+data/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+
+# Secrets
+.env
