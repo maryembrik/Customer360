@@ -6,3 +6,4 @@ pyarrow==26.0.1
 jupyter==1.1.1
 SQLAlchemy==2.0.43
 psycopg[binary]==3.2.10
+scikit-learn==1.9.1

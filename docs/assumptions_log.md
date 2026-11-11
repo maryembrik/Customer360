@@ -25,6 +25,8 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A12 | Fuel & misc lines | `KIOSK-GAS` / `MISC SALES TRAN` lines distort quantities | EDA | Accepted, applied in Phase 2 |
 | A13 | Onboarding period | Households were added during weeks 1–16; trends start at week 17 | EDA | Accepted |
 | A14 | Zero lines | Drop only all-zero lines; keep 4,980 discount-only lines | EDA + warehouse validation | Applied in Phase 2 |
+| A15 | Segmentation | RFM grid + K-Means k=4 on log-scaled R, F, M, avg basket | Silhouette + profiles | Applied in Phase 3 |
+| A16 | Campaign targeting | Campaigns were targeted at heavy shoppers, so raw redemption rates are biased | EDA (Phase 3) | Limitation |
 
 ---
 
@@ -116,6 +118,19 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 - **How it was found:** the first ETL dropped all 14,399 lines; the warehouse validation then showed customer-paid totals $10,328.53 off the raw file.
 - **Decision:** Drop only the 9,419 all-zero lines. Keep the 4,980 discount-only lines, flagged `flag_discount_only_line`, so coupon money is not lost. Money totals in the warehouse match the raw file exactly.
 - **Status:** Applied in Phase 2
+
+### A15 — Segmentation design
+- **Features:** household feature mart as of day 711. Monetary = `customer_paid` (A02); frequency = grocery baskets (fuel excluded, A12).
+- **RFM:** quintile scores 1–5 (ranked first so ties split evenly), FM = ceil((F + M) / 2), standard 10-segment R × FM grid.
+- **K-Means:** recency, frequency, monetary, avg basket value; log1p then standardized; `random_state=42`, `n_init=20`.
+- **Choice of k = 4:** k = 2 has the best silhouette (0.34) but only splits active from inactive. Among k = 3–8, k = 4 is best (≈0.26) and gives four actionable groups. Clusters are named from their profiles, not from label numbers.
+- **Result:** VIP Regulars 31% of households / 65% of spend; Occasional Stock-Up 27% / 19%; Frequent Top-Up 25% / 14%; Lapsing Low-Value 17% / 2%.
+- **Status:** Applied in Phase 3
+
+### A16 — Campaigns were targeted, not random
+- **EDA:** 96% of VIP Regulars received at least one campaign vs 7% of Lapsing Low-Value households; 41% vs 0% redeemed.
+- **Impact:** Comparing redemption or spend between households that did and didn't receive campaigns mixes the campaign effect with who was chosen. Any campaign-effect claim needs a comparison within similar households (e.g. same segment, before vs after).
+- **Status:** Limitation
 
 ---
 

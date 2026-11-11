@@ -46,11 +46,27 @@ Star schema (`sql/schema.sql`):
 
 Example queries: `sql/example_queries.sql`.
 
+## Segmentation (Phase 3)
+
+```bash
+python -m src.pipelines.segment   # features -> RFM + K-Means -> c360.household_segment
+```
+
+| Segment (K-Means, k=4) | Households | Share of spend |
+|---|---|---|
+| VIP Regulars | 31% | 65% |
+| Occasional Stock-Up Shoppers | 27% | 19% |
+| Frequent Top-Up Shoppers | 25% | 14% |
+| Lapsing Low-Value | 17% | 2% |
+
+Tables written to Postgres: `c360.mart_household_features` (27 features per household) and
+`c360.household_segment` (RFM scores, RFM segment, cluster name).
+
 ## Project status
 
 - [x] Phase 1 — Business understanding & EDA (`notebooks/01_dunnhumby_eda.ipynb`)
 - [x] Phase 2 — ETL + PostgreSQL star schema (`src/etl/`, `sql/`)
-- [ ] Phase 3 — RFM & segmentation
+- [x] Phase 3 — RFM & segmentation (`notebooks/02_segmentation.ipynb`, `python -m src.pipelines.segment`)
 - [ ] Phase 4 — Predictive models + SHAP
 - [ ] Phase 5 — NLP (sentiment)
 - [ ] Phase 6 — MLflow, FastAPI, Docker

@@ -4,6 +4,10 @@
 # Data: raw files are large and not ours to redistribute
 data/
 
+# Trained models and run outputs (rebuilt by the pipelines)
+artifacts/
+mlruns/
+
 # Jupyter
 .ipynb_checkpoints/
 
