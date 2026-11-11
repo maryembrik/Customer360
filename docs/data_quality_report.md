@@ -25,7 +25,7 @@ Only `coupon.csv` (5,164 exact duplicate rows); drop them in ETL.
 | Check | Rows |
 |---|---|
 | QUANTITY = 0 | 14,466 |
-| QUANTITY = 0 and SALES_VALUE = 0 | 14,399 |
+| QUANTITY = 0 and SALES_VALUE = 0 | 14,399 (4,980 carry a discount and are kept; 9,419 all-zero lines dropped, A14) |
 | QUANTITY = 0 but SALES_VALUE > 0 | 67 |
 | SALES_VALUE = 0 | 18,850 |
 | SALES_VALUE < 0 | 0 |
@@ -79,6 +79,11 @@ No purchase in the last 60 / 90 / 120 days of the data: 10.4% / 7.0% / 4.9% of h
 - Median household: 79 baskets, $2,158 sales, $27.4 average basket. Top 10% of households = 34.3% of sales.
 - GROCERY 50.8% of sales, DRUG GM 13.1%, PRODUCE 6.9%, MEAT 6.8%, KIOSK-GAS 6.8%. National brands 72.2%.
 - Campaigns: 1,584 households reached; 434 redeemed (2,318 redemptions, 556 coupons). Redemption rate TypeA 16.0%, TypeB 7.9%, TypeC 7.7%.
+
+## Warehouse validation (Phase 2, `python -m src.etl.validate`)
+All 13 checks pass: row counts per table, 1,584 households reached, 2,318 redemptions, and money totals equal to
+the raw file to the cent (`SALES_VALUE` $8,057,463.08; customer paid $8,014,851.54). The first run failed on
+customer-paid, which exposed the discount-only lines (A14).
 
 ## Amazon Reviews sample
 _Not started (Phase 5)._

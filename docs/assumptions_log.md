@@ -24,6 +24,7 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A11 | TypeA coupons | Which 16 coupons each TypeA household received is unknown | Guide | Limitation |
 | A12 | Fuel & misc lines | `KIOSK-GAS` / `MISC SALES TRAN` lines distort quantities | EDA | Accepted, applied in Phase 2 |
 | A13 | Onboarding period | Households were added during weeks 1–16; trends start at week 17 | EDA | Accepted |
+| A14 | Zero lines | Drop only all-zero lines; keep 4,980 discount-only lines | EDA + warehouse validation | Applied in Phase 2 |
 
 ---
 
@@ -109,6 +110,12 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 - **EDA:** Active households per week rise from 88 (week 1) to ~1,300 (week 16), then stay flat; 90.8% of households appear by week 16.
 - **Decision:** Trend analyses and time-windowed features start at week 17 (day ≥ 113). Tenure is computed from each household's first purchase.
 - **Status:** Accepted
+
+### A14 — Zero-quantity, zero-sales lines
+- **EDA:** 14,399 lines have QUANTITY = 0 and SALES_VALUE = 0. Of these, 4,955 carry a `COUPON_DISC` (total −$10,328.53) and 25 a `RETAIL_DISC`; 9,419 are all zero. 592 baskets consist only of such lines.
+- **How it was found:** the first ETL dropped all 14,399 lines; the warehouse validation then showed customer-paid totals $10,328.53 off the raw file.
+- **Decision:** Drop only the 9,419 all-zero lines. Keep the 4,980 discount-only lines, flagged `flag_discount_only_line`, so coupon money is not lost. Money totals in the warehouse match the raw file exactly.
+- **Status:** Applied in Phase 2
 
 ---
 
