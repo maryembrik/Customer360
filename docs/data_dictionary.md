@@ -73,6 +73,21 @@ Meanings come from the 2023 user guide unless marked *(EDA)*. Types are the pand
 | COUPON_UPC | int64 | Coupon ID | |
 | CAMPAIGN | int64 | Campaign ID | Redemption features |
 
+### c360.household_predictions — 2,500 rows, one per household (Phase 4, as of day 711)
+| Column | Type | Meaning |
+|---|---|---|
+| household_key | int | Household ID |
+| as_of_day | int | Scoring day (711 = last day of data) |
+| is_active | bool | Bought in the last 60 days; churn is only scored for active households (A05) |
+| churn_probability | float | P(no purchase in the next 60 days); NULL when not active |
+| churn_flag | int | 1 when churn_probability ≥ the out-of-fold F1 threshold (0.18); NULL when not active |
+| churn_risk_band | text | Low (< 0.05), Medium (0.05 – threshold), High (≥ threshold), Lapsed (not active) |
+| predicted_spend_90d | float | Expected customer_paid in the next 90 days, $ (Tweedie model, ≥ 0) |
+| spend_at_risk_90d | float | churn_probability × predicted_spend_90d |
+| coupon_redeem_probability | float | P(redeems ≥ 1 coupon) if sent one non-TypeA campaign next quarter (A20) |
+| coupon_target_decile | int | 1 = top 10% of coupon_redeem_probability |
+| coupon_score_in_training_population | bool | False for households never targeted: score is an extrapolation (A20) |
+
 ## Amazon Reviews 2023 — Grocery and Gourmet Food (sample)
 
 | Field | Type | Meaning | Transformation |

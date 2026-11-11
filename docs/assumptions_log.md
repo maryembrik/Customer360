@@ -15,7 +15,7 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A02 | Revenue | `SALES_VALUE` = what the retailer received; customer paid = `SALES_VALUE + COUPON_DISC` | Guide + Guide example + EDA | Verified |
 | A03 | Product pricing | Guide formulas kept as printed; their labels contradict the guide's own example | Guide example + EDA | Verified (labels swapped) |
 | A04 | Demographics | 801 of 2,500 households; subset is heavily skewed to heavy shoppers | EDA | Verified |
-| A05 | Churn | 60-day inactivity after a cutoff gives ~10% positives | EDA | Measured, final choice in Phase 4 |
+| A05 | Churn | 60-day window, active households only (~6% positives) | EDA + Phase 4 | Applied in Phase 4 |
 | A06 | Spending decline | Not needed as a fallback, since churn is not rare | EDA | Dropped |
 | A07 | Review sampling | Uniform reservoir sample of 30K eligible reviews | Sampling design | Accepted |
 | A08 | Sentiment | Ratings give weak (proxy) sentiment labels | Modeling assumption | Accepted |
@@ -27,6 +27,11 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A14 | Zero lines | Drop only all-zero lines; keep 4,980 discount-only lines | EDA + warehouse validation | Applied in Phase 2 |
 | A15 | Segmentation | RFM grid + K-Means k=4 on log-scaled R, F, M, avg basket | Silhouette + profiles | Applied in Phase 3 |
 | A16 | Campaign targeting | Campaigns were targeted at heavy shoppers, so raw redemption rates are biased | EDA (Phase 3) | Limitation |
+| A17 | Model validation | Out-of-time cutoffs, no label overlap between splits, rolling-backtest selection, test used once | Backtest + bootstrap | Applied in Phase 4 |
+| A18 | Model choice (classifiers) | Probability average of logistic regression + XGBoost for churn and coupon | Backtest (6/7 and 2/3 folds) + test | Applied in Phase 4 |
+| A19 | CLV objective | Tweedie loss for 90-day spend; squared error, L1 and log target rejected | Backtest | Applied in Phase 4 |
+| A20 | Coupon scoring scenario | Day-711 coupon score assumes one non-TypeA campaign next quarter; never-targeted households flagged | Data has no campaigns after day 711 | Limitation |
+| A21 | Known model limits | CLV over-predicts zero spenders; −7% total bias in the test quarter (period drift) | Test diagnostics | Limitation |
 
 ---
 
@@ -62,7 +67,10 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 - **Setup:** Cutoff day; features from days ≤ cutoff; label = no purchase in the next `window` days; only households active before the cutoff; `cutoff + window ≤ 711`.
 - **EDA (cutoffs 500/550/600):** inactive share ≈ 31% (14 days), 18% (30), 13% (45), 10% (60), 7% (90), stable across cutoffs. 7.0% of households bought nothing in the last 90 days of the data.
 - **Proposal:** 60-day window (~10% positives): long enough to skip short breaks, frequent enough to model.
-- **Status:** Measured; final choice in Phase 4
+- **Final (Phase 4):** 60-day window, scored only for households active in the 60 days before the cutoff (`recency ≤ 60`).
+  Among active households the churn rate is 5.8% (train+valid) and 6.15% (test cutoff 620), lower than the ~10% above
+  because already-lapsed households are excluded: they have churned, they are not "at risk".
+- **Status:** Applied in Phase 4
 
 ### A06 — Spending decline fallback
 - **Decision:** Dropped as a fallback. Churn is not rare (A05). It can still be an extra target if time allows.
@@ -141,3 +149,35 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 - **Impact:**
 - **Status:**
 -->
+
+### A17 — Model validation design (Phase 4)
+- **Decision:** Features at cutoff day T use only days ≤ T; labels describe (T, T + horizon]. Several training cutoffs are stacked. Asserts in `src/models/datasets.py` require: last training label ends before the validation cutoff, validation labels end before the test cutoff, test labels end by day 711, and every cutoff is ≥ day 224 so the 8-week-prior trend window is past onboarding (A13).
+- **Bug found and fixed:** the first version stacked cutoff 440 with a 90-day horizon (labels to day 530) while validating at 470/500, so training labels overlapped the validation window. Cutoffs were moved earlier.
+- **Selection:** rolling-origin backtest (churn 7 folds, CLV 4, coupon 3) instead of one validation cutoff. Evidence: one cutoff has ~120 churners; bootstrap 95% intervals of PR-AUC for the three single models overlapped almost completely (e.g. 0.20–0.36 vs 0.18–0.32).
+- **Test:** cutoffs 620 (churn), 590 (CLV), 560 (coupon) are scored once, after all choices; metrics carry 500-sample bootstrap intervals. Decision thresholds come from pooled out-of-fold predictions, never from test.
+- **Tuning:** logistic regression C chosen on the backtest only (churn 0.1, coupon 0.01). This reuses the selection folds, so backtest scores are slightly optimistic; the untouched test cutoff is the honest estimate.
+- **Status:** Applied in Phase 4
+
+### A18 — Classifier choice: average of logistic regression and XGBoost
+- **Evidence:** Churn single models were tied (backtest PR-AUC 0.293–0.305; test 0.328–0.349, overlapping intervals) but won different folds. The probability average won 6 of 7 folds (mean 0.319) and is best on test (PR-AUC 0.366, 95% CI 0.29–0.44; ROC-AUC 0.88; top-decile lift 5.3×). Coupon: average best on backtest (0.442) and test (PR-AUC 0.606, CI 0.54–0.66; ROC-AUC 0.83; lift 3.6×).
+- **Coupon regularisation:** with C = 0.5 the correlated spend features took opposite signs (`monetary` −0.36, `spend_last_8w` +0.15) and the top test decile was over-confident (0.84 predicted vs 0.72 observed, ±0.08). C = 0.01 fixed both on the backtest (top decile 0.51 vs 0.51) and improved PR-AUC 0.411 → 0.434.
+- **Explainability:** SHAP is computed on the XGBoost half of the average (a linear model's coefficients explain the other half).
+- **Status:** Applied in Phase 4
+
+### A19 — CLV: Tweedie objective
+- **Backtest (mean of 4 folds):** squared-error XGBoost MAE 174.4 and negative predictions (test minimum −$161); L1 MAE 167.8 but total bias −4.4% (−12.5% on test) because it predicts the median; log target MAE 175.0 and total bias −16.5% (expm1 of a mean log is a geometric mean); LightGBM Tweedie (power 1.5) MAE 169.1, total bias −1.2%, never below zero.
+- **Decision:** Tweedie, because CLV is summed across households, so an unbiased total matters as much as per-household error.
+- **Test:** MAE $166.5 (CI 160–174) vs naive run-rate $179.6; R² 0.77; Spearman 0.84.
+- **Status:** Applied in Phase 4
+
+### A20 — Coupon propensity scoring scenario
+- **Issue:** The coupon model needs "campaigns received next quarter", but the data has no campaigns after day 711.
+- **Decision:** Day-711 scores answer "if this household gets one campaign (not TypeA) next quarter, how likely is a redemption?" (`upcoming_campaigns = 1`, `upcoming_typea = 0`).
+- **Limitation:** Training rows are only households marketing targeted (A16). The 916 never-targeted households score 2% on average versus 11% for the 1,584 targeted ones; their scores are extrapolations and are flagged by `coupon_score_in_training_population = false`.
+- **Status:** Limitation
+
+### A21 — Known model limitations
+- **Zero spenders:** 6.8% of test households spend $0 in the next 90 days but receive $10–600 predicted. A hurdle model (P(buy) × spend | buy) is the fix; not built.
+- **Period drift:** test-quarter total spend was under-predicted by 7%, the same as the naive baseline, so the later period spent more than history. No calendar dates (A01), so seasonality cannot be modelled.
+- **Churn calibration:** slightly low in the top bins on test (0.28 predicted vs 0.33 observed) because the test churn rate (6.15%) is above training (5.8%). Ranking is unaffected.
+- **Status:** Limitation

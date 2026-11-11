@@ -7,3 +7,7 @@ jupyter==1.1.1
 SQLAlchemy==2.0.43
 psycopg[binary]==3.2.10
 scikit-learn==1.9.1
+xgboost==3.4.1
+lightgbm==4.7.0
+shap==0.54.1
+mlflow==3.18.0

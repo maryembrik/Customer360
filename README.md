@@ -62,12 +62,33 @@ python -m src.pipelines.segment   # features -> RFM + K-Means -> c360.household_
 Tables written to Postgres: `c360.mart_household_features` (27 features per household) and
 `c360.household_segment` (RFM scores, RFM segment, cluster name).
 
+## Predictive models (Phase 4)
+
+```bash
+python -m src.models.train      # out-of-time datasets, backtest selection, test report, plots, SHAP, MLflow
+python -m src.pipelines.score   # score all households as of day 711 -> c360.household_predictions
+mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db   # browse every run
+```
+
+All evaluation is out-of-time: features up to a cutoff day, labels from the days after it, no label overlap
+between train / validation / test, model choice on a rolling backtest, test touched once (A17).
+
+| Task | Selected model | Test result (95% CI) | Baseline |
+|---|---|---|---|
+| Churn: active household buys nothing in next 60 days (6% positive) | Avg. of logistic regression + XGBoost | PR-AUC 0.366 (0.29–0.44), ROC-AUC 0.88, top-decile lift 5.3× | random PR-AUC 0.062 |
+| Spend in next 90 days | LightGBM, Tweedie loss | MAE $166.5 (160–174), R² 0.77 | run-rate rule MAE $179.6 |
+| Coupon redemption given a campaign (20% positive) | Avg. of logistic regression + XGBoost | PR-AUC 0.606 (0.54–0.66), ROC-AUC 0.83, top-decile lift 3.6× | random PR-AUC 0.196 |
+
+Diagnostic plots (ROC, PR, calibration, lift, gains, confusion matrix, predicted vs actual, residuals) and SHAP
+plots are in `reports/figures/`; the walkthrough is `notebooks/03_predictive_models.ipynb`.
+Known limitations are logged in A20–A21.
+
 ## Project status
 
 - [x] Phase 1 — Business understanding & EDA (`notebooks/01_dunnhumby_eda.ipynb`)
 - [x] Phase 2 — ETL + PostgreSQL star schema (`src/etl/`, `sql/`)
 - [x] Phase 3 — RFM & segmentation (`notebooks/02_segmentation.ipynb`, `python -m src.pipelines.segment`)
-- [ ] Phase 4 — Predictive models + SHAP
+- [x] Phase 4 — Predictive models + SHAP + MLflow tracking (`notebooks/03_predictive_models.ipynb`)
 - [ ] Phase 5 — NLP (sentiment)
 - [ ] Phase 6 — MLflow, FastAPI, Docker
 - [ ] Phase 7 — Power BI
