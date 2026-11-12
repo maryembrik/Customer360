@@ -1,0 +1,9 @@
+.venv/
+.env
+.git/
+mlruns/
+notebooks/
+data/raw/
+data/sampled/
+**/__pycache__/
+*.pyc

@@ -184,7 +184,6 @@ def run_task(task: Task, inputs: dict, cache: dict) -> dict:
     else:
         fig = ev.regression_plots(yte, test_preds, best, task.description, FIGURES / f"{task.name}_diagnostics.png")
 
-    # SHAP needs a tree model; if a linear model won, explain the LightGBM challenger instead
     # SHAP needs a tree model: the winner itself, the XGBoost half of the average, or LightGBM if a linear model won
     if isinstance(best_model, (lgb.LGBMModel, xgb.XGBModel)):
         shap_source = best_model

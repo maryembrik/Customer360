@@ -17,7 +17,7 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A04 | Demographics | 801 of 2,500 households; subset is heavily skewed to heavy shoppers | EDA | Verified |
 | A05 | Churn | 60-day window, active households only (~6% positives) | EDA + Phase 4 | Applied in Phase 4 |
 | A06 | Spending decline | Not needed as a fallback, since churn is not rare | EDA | Dropped |
-| A07 | Review sampling | Uniform reservoir sample of 30K eligible reviews | Sampling design | Accepted |
+| A07 | Review sampling | Uniform reservoir sample of 30K eligible reviews | Sampling design | Superseded by A22 |
 | A08 | Sentiment | Ratings give weak (proxy) sentiment labels | Modeling assumption | Accepted |
 | A09 | Customer identity | Amazon reviewers and dunnhumby households are separate populations | Source schemas | Accepted |
 | A10 | Data source | Official release; masked demographics used as generic codes | SHA-256 + Guide + EDA | Accepted |
@@ -32,6 +32,8 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 | A19 | CLV objective | Tweedie loss for 90-day spend; squared error, L1 and log target rejected | Backtest | Applied in Phase 4 |
 | A20 | Coupon scoring scenario | Day-711 coupon score assumes one non-TypeA campaign next quarter; never-targeted households flagged | Data has no campaigns after day 711 | Limitation |
 | A21 | Known model limits | CLV over-predicts zero spenders; −7% total bias in the test quarter (period drift) | Test diagnostics | Limitation |
+| A22 | Review sampling method | Random byte offsets + length-bias rejection over the whole file; nothing else downloaded | Disk + bandwidth limits, sample checks | Applied in Phase 5 |
+| A23 | Sentiment model | Star-count titles removed (label leak); product-grouped split; 5-fold CV selection; word TF-IDF + logistic regression | Feature inspection + CV | Applied in Phase 5 |
 
 ---
 
@@ -79,7 +81,7 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 ### A07 — Review sampling
 - **Decision:** One streaming pass over the compressed JSONL. Validate each record, keep a reservoir of 30,000 eligible reviews, count ratings in the same pass, save as Parquet in `data/sampled/`.
 - **Reproducibility:** Fixed random seed, plus the source file name and size recorded here.
-- **Status:** Accepted
+- **Status:** Superseded by A22 (the file did not fit on disk and streaming was too slow; same goal, uniform 30K)
 
 ### A08 — Rating-derived sentiment labels
 - **Decision:** 1–2 stars = Negative, 3 = Neutral, 4–5 = Positive.
@@ -181,3 +183,38 @@ Source of truth: `data/raw/dunnhumby/dunnhumby_user_guide.pdf`, © 2023, from th
 - **Period drift:** test-quarter total spend was under-predicted by 7%, the same as the naive baseline, so the later period spent more than history. No calendar dates (A01), so seasonality cannot be modelled.
 - **Churn calibration:** slightly low in the top bins on test (0.28 predicted vs 0.33 observed) because the test churn rate (6.15%) is above training (5.8%). Ranking is unaffected.
 - **Status:** Limitation
+
+### A22 — How the review sample was drawn (replaces the streaming plan in A07)
+- **Constraint:** The Grocery file is 1.63 GB gzipped / 5.97 GB as JSONL; 1.1 GB of disk was free. Streaming the
+  gzip measured 0.03–0.3 MB/s with repeated disconnects (10+ hours); parallel connections did not raise total bandwidth.
+- **Method:** Random byte offsets over the whole JSONL (Hugging Face copy of the official release), fetched with HTTP
+  Range requests; the line after each offset is the candidate. That line is reached with probability proportional to
+  the length of the line before it, and the file is sorted by user, so this would favour verbose users. Each candidate
+  is accepted with probability C / len(previous line), C = 200 bytes (below the shortest record, 242 bytes in a
+  pilot), which makes every review equally likely. Duplicate draws are skipped (sampling without replacement).
+  Seeded, processed in fixed batches, reproducible.
+- **Result:** Only the sampled reviews are downloaded; nothing else is stored, so there is nothing to delete.
+  Position-in-file of the sample is checked to be uniform (`reports/figures/sentiment_data.png`).
+  Counts and the estimated population size are in `data/sampled/amazon_grocery_reviews_sample_meta.json`.
+- **Status:** Applied in Phase 5
+
+### A23 — Sentiment model design
+- **Label leak found and removed:** 3,035 reviews (10%) have auto-generated titles such as "Five Stars" / "Two Stars"
+  that match the star label 99.9% of the time. The first model's strongest features were "two stars", "one star",
+  "three stars". These titles are dropped from the model input (the review text is kept); stars mentioned inside the
+  text (0.9%, written by the customer) are kept. Test macro-F1 went from 0.715 (leaky) to 0.689 (honest).
+- **Duplicates:** only same-user copy-pastes are dropped (2). Identical short texts from different people
+  ("Good . Good", 34 times) are real reviews.
+- **Split:** grouped by product (no product in both development and test), stratified by label. 25,713 development
+  reviews in 5 folds, 4,285 test reviews used once.
+- **Selection:** 5-fold CV macro-F1. A single validation split was too noisy (C grid flat at 0.69–0.70, picked an edge
+  value). Word TF-IDF (1–2-grams) + logistic regression, C = 1, class_weight balanced: CV 0.695 ± 0.006, best in
+  4 of 5 folds; word + character n-grams 0.691, Complement NB 0.631, majority class 0.288.
+- **Test:** macro-F1 0.689 (95% CI 0.669–0.710); negative F1 0.77 (recall 0.80), positive 0.94, neutral 0.36.
+  Neutral (3 stars) is the hard class: these reviews mix praise and complaints.
+- **Calibration:** balanced class weights over-predict negatives (823 predicted vs 760 true on test). Business figures
+  (theme negative rates) therefore use the observed star labels on all 30K reviews; the model is for new text with
+  no rating.
+- **Themes (keyword rules, transparent):** reviews mentioning packaging/damage are 37% negative (CI 36–39%) vs 18%
+  overall; freshness/expiry 31%; delivery/shipping 26%; taste, price and quality are at or below average.
+- **Status:** Applied in Phase 5

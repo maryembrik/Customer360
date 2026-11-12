@@ -7,6 +7,8 @@ data/
 # Trained models and run outputs (rebuilt by the pipelines)
 artifacts/
 mlruns/
+# Power BI extracts: row-level dunnhumby data and Amazon review titles (python -m src.pipelines.export_bi)
+reports/powerbi/
 
 # Jupyter
 .ipynb_checkpoints/

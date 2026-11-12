@@ -88,7 +88,20 @@ Meanings come from the 2023 user guide unless marked *(EDA)*. Types are the pand
 | coupon_target_decile | int | 1 = top 10% of coupon_redeem_probability |
 | coupon_score_in_training_population | bool | False for households never targeted: score is an extrapolation (A20) |
 
+### Power BI tables (Phase 7, `reports/powerbi/*.csv` and `c360.bi_*`)
+| Table | Grain | Main columns |
+|---|---|---|
+| bi_household | household | segment, rfm_segment, r/f/m_score, every household_predictions column, monetary, frequency, recency, avg_basket_value, campaigns_received, has_demographics |
+| bi_weekly_segment | week × segment | customer_paid, sales_value, retail_disc, coupon_disc, baskets, households, is_onboarding (week ≤ 16, A13) |
+| bi_department | department | customer_paid, sales_value, private_label_share, baskets, households |
+| bi_campaign | campaign | campaign_type, start/end_day, duration_days, households_targeted, redeeming_households (targeted ones only), redemption_rate, targeted_<segment> |
+| bi_review_sentiment | sampled review | rating, star_label, predicted_label, year, n_words, verified_purchase, helpful_vote, mentions_<theme> |
+| bi_review_themes | theme | reviews, share_of_reviews, negative_rate, share_of_all_negatives (on held-out test predictions) |
+
 ## Amazon Reviews 2023 — Grocery and Gourmet Food (sample)
+
+`data/sampled/amazon_grocery_reviews_sample.parquet`: 30,000 reviews drawn uniformly at random from the whole
+file (A22). `byte_offset` is the review's position in the source JSONL (used to show the sample spans the file).
 
 | Field | Type | Meaning | Transformation |
 |---|---|---|---|
